@@ -1,6 +1,5 @@
-# main.py
-import io
 import os
+import tempfile
 from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -22,19 +21,20 @@ GLOBAL_DOCS = []
 GLOBAL_VECTORSTORE = None
 GLOBAL_RETRIEVER = None
 
-# Groq LLM
+# Initialize LLM and Embeddings using fallback/safe defaults
+groq_api_key = os.getenv("GROQ_API_KEY")
+hf_api_key = os.getenv("HF_API_KEY")
+
 LLM = ChatGroq(
-    api_key=os.getenv("GROQ_API_KEY"),
+    api_key=groq_api_key,
     model="llama-3.1-8b-instant",
     temperature=0.2,
-)
+) if groq_api_key else None
 
-# HuggingFace Inference API embeddings (Render-safe)
 EMBEDDINGS = HuggingFaceInferenceAPIEmbeddings(
-    api_key=os.getenv("HF_API_KEY"),
+    api_key=hf_api_key,
     model_name="BAAI/bge-small-en-v1.5"
-)
-
+) if hf_api_key else None
 
 
 def join_unique_docs(docs):
@@ -64,6 +64,9 @@ class QueryResponse(BaseModel):
 async def upload_pdfs(files: List[UploadFile] = File(...)):
     global GLOBAL_DOCS, GLOBAL_VECTORSTORE, GLOBAL_RETRIEVER
 
+    if not EMBEDDINGS:
+        raise HTTPException(status_code=500, detail="HF_API_KEY is missing in environment variables.")
+
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
@@ -75,22 +78,30 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
             raise HTTPException(status_code=400, detail=f"{f.filename} is not a PDF.")
 
         content = await f.read()
-        pdf_bytes = io.BytesIO(content)
+        
+        # Save to temporary file because PyPDFLoader expects a path string
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
 
-        loader = PyPDFLoader(pdf_bytes)
-        docs = loader.load()
-        chunks = splitter.split_documents(docs)
-        all_docs.extend(chunks)
+        try:
+            loader = PyPDFLoader(tmp_path)
+            docs = loader.load()
+            chunks = splitter.split_documents(docs)
+            all_docs.extend(chunks)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     if not all_docs:
         raise HTTPException(status_code=400, detail="No text extracted from PDFs.")
 
     GLOBAL_DOCS = all_docs
 
+    # Use in-memory Chroma instance to avoid file persistence errors on Render
     GLOBAL_VECTORSTORE = Chroma.from_documents(
         documents=GLOBAL_DOCS,
-        embedding=EMBEDDINGS,
-        persist_directory="./uploaded_db"
+        embedding=EMBEDDINGS
     )
     GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever(search_kwargs={"k": 6})
 
@@ -99,7 +110,10 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
 
 @app.post("/query", response_model=QueryResponse)
 def query_pdfs(req: QueryRequest):
-    global GLOBAL_RETRIEVER
+    global GLOBAL_RETRIEVER, LLM
+
+    if not LLM:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY is missing in environment variables.")
 
     if GLOBAL_RETRIEVER is None:
         raise HTTPException(status_code=400, detail="No PDFs indexed yet.")
@@ -140,7 +154,7 @@ QUESTION:
     if '"' in answer:
         try:
             quote = answer.split('"')[1]
-        except:
+        except Exception:
             quote = None
 
     return QueryResponse(answer=answer, quote=quote, confidence=confidence, context=context)
@@ -151,5 +165,6 @@ def status():
     return {
         "status": "online",
         "docs_indexed": len(GLOBAL_DOCS),
-        "has_vectorstore": GLOBAL_VECTORSTORE is not None
+        "has_vectorstore": GLOBAL_VECTORSTORE is not None,
+        "keys_configured": bool(groq_api_key and hf_api_key)
     }
