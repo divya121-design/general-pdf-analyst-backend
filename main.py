@@ -3,6 +3,8 @@ import tempfile
 from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import RedirectResponse
+
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -163,6 +165,10 @@ QUESTION:
 
     return QueryResponse(answer=answer, quote=quote, confidence=confidence, context=context)
 
+@app.get("/")
+def read_root():
+    # Redirect users to interactive API docs
+    return RedirectResponse(url="/docs")
 
 @app.get("/status")
 def status():
