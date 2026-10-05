@@ -69,7 +69,12 @@ class QueryResponse(BaseModel):
 
 
 @app.post("/upload")
-async def upload_pdfs(files: List[UploadFile] = File(...)):
+async def upload_pdfs(
+    files: List[UploadFile] = File(
+        ..., 
+        description="Upload one or more PDF files"
+    )
+):
     global GLOBAL_DOCS, GLOBAL_VECTORSTORE, GLOBAL_RETRIEVER
 
     if not EMBEDDINGS:
