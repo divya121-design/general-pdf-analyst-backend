@@ -7,3 +7,4 @@ pydantic
 python-dotenv
 groq
 langchain-groq
+langchain-huggingface

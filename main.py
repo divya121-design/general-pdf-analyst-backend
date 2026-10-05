@@ -11,29 +11,28 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 
-from langchain_groq import GroqEmbeddings, ChatGroq
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 
 load_dotenv()
 
-app = FastAPI(title="General PDF Analyst (Groq Agentic RAG)")
+app = FastAPI(title="General PDF Analyst (Groq + HF Embeddings)")
 
 GLOBAL_DOCS = []
 GLOBAL_VECTORSTORE = None
 GLOBAL_RETRIEVER = None
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise RuntimeError("GROQ_API_KEY not set in environment.")
-
-EMBEDDINGS = GroqEmbeddings(
-    api_key=GROQ_API_KEY,
-    model="text-embedding-3-small"
-)
-
+# Groq LLM
 LLM = ChatGroq(
-    api_key=GROQ_API_KEY,
+    api_key=os.getenv("GROQ_API_KEY"),
     model="llama-3.1-8b-instant",
     temperature=0.2,
+)
+
+# HuggingFace Inference API embeddings (Render-safe)
+EMBEDDINGS = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    api_key=os.getenv("HF_API_KEY")
 )
 
 
@@ -102,7 +101,7 @@ def query_pdfs(req: QueryRequest):
     global GLOBAL_RETRIEVER
 
     if GLOBAL_RETRIEVER is None:
-        raise HTTPException(status_code=400, detail="No PDFs indexed yet. Upload PDFs first.")
+        raise HTTPException(status_code=400, detail="No PDFs indexed yet.")
 
     question = req.question.strip()
     if not question:
@@ -116,35 +115,31 @@ def query_pdfs(req: QueryRequest):
         return QueryResponse(answer=answer, quote=None, confidence="Low", context=None)
 
     prompt = f"""
-You are a general-purpose analyst. Use ONLY the CONTEXT below (extracted from user-provided PDFs) to answer the QUESTION.
-If the context does not contain the answer, say "I could not find relevant information in the provided PDF context."
-Always quote the exact sentence or short excerpt from the CONTEXT that supports your answer.
+Use ONLY the CONTEXT below to answer the QUESTION.
+If the context does not contain the answer, say so.
+Always quote the exact sentence from the context.
 
 CONTEXT:
 {context}
 
 QUESTION:
 {question}
-
-Answer concisely, then provide the supporting quote (if any).
 """
 
     llm_resp = LLM.invoke(prompt)
-    answer = llm_resp.content if hasattr(llm_resp, "content") else str(llm_resp)
+    answer = llm_resp.content
 
-    low_confidence_phrases = [
-        "no information", "could not find", "not enough information",
-        "no relevant data", "i could not find", "insufficient information"
-    ]
-    confidence = "High"
-    if any(p in answer.lower() for p in low_confidence_phrases):
-        confidence = "Low"
+    low_confidence = any(
+        p in answer.lower()
+        for p in ["could not find", "no information", "insufficient"]
+    )
+    confidence = "Low" if low_confidence else "High"
 
     quote = None
     if '"' in answer:
         try:
             quote = answer.split('"')[1]
-        except Exception:
+        except:
             quote = None
 
     return QueryResponse(answer=answer, quote=quote, confidence=confidence, context=context)
