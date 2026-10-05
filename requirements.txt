@@ -5,3 +5,4 @@ langchain-text-splitters
 langchain-huggingface
 langchain-chroma
 pydantic
+sentence-transformers
