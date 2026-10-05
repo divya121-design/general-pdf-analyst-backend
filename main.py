@@ -21,7 +21,6 @@ GLOBAL_DOCS = []
 GLOBAL_VECTORSTORE = None
 GLOBAL_RETRIEVER = None
 
-# Initialize API Keys safely
 groq_api_key = os.getenv("GROQ_API_KEY")
 hf_api_key = os.getenv("HF_API_KEY")
 
@@ -31,11 +30,17 @@ LLM = ChatGroq(
     temperature=0.2,
 ) if groq_api_key else None
 
-# Updated to use 'huggingfacehub_api_token' instead of 'api_key'
-EMBEDDINGS = HuggingFaceEndpointEmbeddings(
-    huggingfacehub_api_token=hf_api_key,
-    model="BAAI/bge-small-en-v1.5"
-) if hf_api_key else None
+# Supports both parameter conventions depending on package version
+try:
+    EMBEDDINGS = HuggingFaceEndpointEmbeddings(
+        huggingface_api_key=hf_api_key,
+        model="BAAI/bge-small-en-v1.5"
+    ) if hf_api_key else None
+except Exception:
+    EMBEDDINGS = HuggingFaceEndpointEmbeddings(
+        huggingfacehub_api_token=hf_api_key,
+        model="BAAI/bge-small-en-v1.5"
+    ) if hf_api_key else None
 
 
 def join_unique_docs(docs):
@@ -79,7 +84,7 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
             raise HTTPException(status_code=400, detail=f"{f.filename} is not a PDF.")
 
         content = await f.read()
-        
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(content)
             tmp_path = tmp_file.name
