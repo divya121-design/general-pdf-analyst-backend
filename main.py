@@ -11,7 +11,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceInferenceAPIEmbeddings
 from langchain_groq import ChatGroq
 
 load_dotenv()
@@ -30,10 +30,11 @@ LLM = ChatGroq(
 )
 
 # HuggingFace Inference API embeddings (Render-safe)
-EMBEDDINGS = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    api_key=os.getenv("HF_API_KEY")
+EMBEDDINGS = HuggingFaceInferenceAPIEmbeddings(
+    api_key=os.getenv("HF_API_KEY"),
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
+
 
 
 def join_unique_docs(docs):
