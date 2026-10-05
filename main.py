@@ -68,10 +68,13 @@ class QueryResponse(BaseModel):
     context: Optional[str] = None
 
 
+from typing import List
+from fastapi import FastAPI, UploadFile, File, HTTPException
+
 @app.post("/upload")
 async def upload_pdfs(
     files: List[UploadFile] = File(
-        ..., 
+        ...,
         description="Upload one or more PDF files"
     )
 ):
@@ -117,7 +120,6 @@ async def upload_pdfs(
     GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever(search_kwargs={"k": 6})
 
     return {"status": "indexed", "documents": len(GLOBAL_DOCS)}
-
 
 @app.post("/query", response_model=QueryResponse)
 def query_pdfs(req: QueryRequest):
