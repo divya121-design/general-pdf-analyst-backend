@@ -1,9 +1,10 @@
 import os
 import tempfile
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import RedirectResponse
+from fastapi.openapi.utils import get_openapi
 
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -19,6 +20,21 @@ load_dotenv()
 
 app = FastAPI(title="General PDF Analyst (Groq + HF Embeddings)")
 
+# Force OpenAPI 3.0.3 to fix Swagger UI file input rendering bug
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version="3.0.3",
+        routes=app.routes,
+    )
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
 GLOBAL_DOCS = []
 GLOBAL_VECTORSTORE = None
 GLOBAL_RETRIEVER = None
@@ -32,7 +48,6 @@ LLM = ChatGroq(
     temperature=0.2,
 ) if groq_api_key else None
 
-# Supports both parameter conventions depending on package version
 try:
     EMBEDDINGS = HuggingFaceEndpointEmbeddings(
         huggingface_api_key=hf_api_key,
@@ -70,10 +85,10 @@ class QueryResponse(BaseModel):
 
 @app.post("/upload")
 async def upload_pdfs(
-    files: list[UploadFile] = File(
-        ...,
-        description="Upload one or more PDF files"
-    )
+    files: Annotated[
+        list[UploadFile], 
+        File(description="Upload one or more PDF files")
+    ]
 ):
     global GLOBAL_DOCS, GLOBAL_VECTORSTORE, GLOBAL_RETRIEVER
 
