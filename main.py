@@ -1,21 +1,40 @@
+# main.py
 import io
+import os
 from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
-app = FastAPI(title="General PDF Analyst (Agentic RAG)")
+from langchain_groq import GroqEmbeddings, ChatGroq
+
+load_dotenv()
+
+app = FastAPI(title="General PDF Analyst (Groq Agentic RAG)")
 
 GLOBAL_DOCS = []
 GLOBAL_VECTORSTORE = None
 GLOBAL_RETRIEVER = None
 
-EMBEDDINGS = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY not set in environment.")
+
+EMBEDDINGS = GroqEmbeddings(
+    api_key=GROQ_API_KEY,
+    model="text-embedding-3-small"
+)
+
+LLM = ChatGroq(
+    api_key=GROQ_API_KEY,
+    model="llama-3.1-8b-instant",
+    temperature=0.2,
+)
 
 
 def join_unique_docs(docs):
@@ -27,11 +46,6 @@ def join_unique_docs(docs):
             seen.add(text)
             unique.append(text)
     return "\n\n".join(unique)
-
-
-def call_llm_safe(prompt: str) -> str:
-    # Placeholder: replace with real LLM call later
-    return f"[LLM placeholder] Answer based on context:\n\n{prompt[:1000]}"
 
 
 class QueryRequest(BaseModel):
@@ -58,7 +72,7 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
 
     for f in files:
         if not f.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail=f"File {f.filename} is not a PDF.")
+            raise HTTPException(status_code=400, detail=f"{f.filename} is not a PDF.")
 
         content = await f.read()
         pdf_bytes = io.BytesIO(content)
@@ -88,7 +102,7 @@ def query_pdfs(req: QueryRequest):
     global GLOBAL_RETRIEVER
 
     if GLOBAL_RETRIEVER is None:
-        raise HTTPException(status_code=400, detail="No PDFs indexed yet. Upload PDFs first via /upload.")
+        raise HTTPException(status_code=400, detail="No PDFs indexed yet. Upload PDFs first.")
 
     question = req.question.strip()
     if not question:
@@ -99,12 +113,7 @@ def query_pdfs(req: QueryRequest):
 
     if not context:
         answer = "I could not find relevant information in the provided PDF context."
-        return QueryResponse(
-            answer=answer,
-            quote=None,
-            confidence="Low",
-            context=None
-        )
+        return QueryResponse(answer=answer, quote=None, confidence="Low", context=None)
 
     prompt = f"""
 You are a general-purpose analyst. Use ONLY the CONTEXT below (extracted from user-provided PDFs) to answer the QUESTION.
@@ -120,15 +129,12 @@ QUESTION:
 Answer concisely, then provide the supporting quote (if any).
 """
 
-    answer = call_llm_safe(prompt)
+    llm_resp = LLM.invoke(prompt)
+    answer = llm_resp.content if hasattr(llm_resp, "content") else str(llm_resp)
 
     low_confidence_phrases = [
-        "no information",
-        "could not find",
-        "not enough information",
-        "no relevant data",
-        "i could not find",
-        "insufficient information",
+        "no information", "could not find", "not enough information",
+        "no relevant data", "i could not find", "insufficient information"
     ]
     confidence = "High"
     if any(p in answer.lower() for p in low_confidence_phrases):
@@ -141,12 +147,7 @@ Answer concisely, then provide the supporting quote (if any).
         except Exception:
             quote = None
 
-    return QueryResponse(
-        answer=answer,
-        quote=quote,
-        confidence=confidence,
-        context=context
-    )
+    return QueryResponse(answer=answer, quote=quote, confidence=confidence, context=context)
 
 
 @app.get("/status")
