@@ -1,6 +1,6 @@
 import os
 import tempfile
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import RedirectResponse
@@ -68,12 +68,9 @@ class QueryResponse(BaseModel):
     context: Optional[str] = None
 
 
-from typing import List
-from fastapi import FastAPI, UploadFile, File, HTTPException
-
 @app.post("/upload")
 async def upload_pdfs(
-    files: List[UploadFile] = File(
+    files: list[UploadFile] = File(
         ...,
         description="Upload one or more PDF files"
     )
@@ -120,6 +117,7 @@ async def upload_pdfs(
     GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever(search_kwargs={"k": 6})
 
     return {"status": "indexed", "documents": len(GLOBAL_DOCS)}
+
 
 @app.post("/query", response_model=QueryResponse)
 def query_pdfs(req: QueryRequest):
@@ -172,10 +170,11 @@ QUESTION:
 
     return QueryResponse(answer=answer, quote=quote, confidence=confidence, context=context)
 
+
 @app.get("/")
 def read_root():
-    # Redirect users to interactive API docs
     return RedirectResponse(url="/docs")
+
 
 @app.get("/status")
 def status():
