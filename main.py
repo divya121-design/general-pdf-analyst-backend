@@ -10,7 +10,6 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 
-# Updated import name to match current langchain_huggingface versions
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_groq import ChatGroq
 
@@ -22,7 +21,7 @@ GLOBAL_DOCS = []
 GLOBAL_VECTORSTORE = None
 GLOBAL_RETRIEVER = None
 
-# Initialize LLM and Embeddings with safe key checks
+# Initialize API Keys safely
 groq_api_key = os.getenv("GROQ_API_KEY")
 hf_api_key = os.getenv("HF_API_KEY")
 
@@ -32,8 +31,9 @@ LLM = ChatGroq(
     temperature=0.2,
 ) if groq_api_key else None
 
+# Updated to use 'huggingfacehub_api_token' instead of 'api_key'
 EMBEDDINGS = HuggingFaceEndpointEmbeddings(
-    api_key=hf_api_key,
+    huggingfacehub_api_token=hf_api_key,
     model="BAAI/bge-small-en-v1.5"
 ) if hf_api_key else None
 
@@ -80,7 +80,6 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
 
         content = await f.read()
         
-        # Write to temp file because PyPDFLoader requires a file path string
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(content)
             tmp_path = tmp_file.name
@@ -99,7 +98,6 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
 
     GLOBAL_DOCS = all_docs
 
-    # In-memory Chroma vectorstore (avoids filesystem permission errors on Render)
     GLOBAL_VECTORSTORE = Chroma.from_documents(
         documents=GLOBAL_DOCS,
         embedding=EMBEDDINGS
