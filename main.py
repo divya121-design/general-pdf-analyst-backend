@@ -82,21 +82,17 @@ class QueryResponse(BaseModel):
     confidence: str
     context: Optional[str] = None
 
-
 @app.post("/upload")
 async def upload_pdfs(
-    files: Annotated[
-        list[UploadFile], 
-        File(description="Upload one or more PDF files")
-    ]
+    file: UploadFile = File(..., description="Select a PDF file to analyze")
 ):
     global GLOBAL_DOCS, GLOBAL_VECTORSTORE, GLOBAL_RETRIEVER
 
     if not EMBEDDINGS:
         raise HTTPException(status_code=500, detail="HF_API_KEY is missing in environment variables.")
 
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
+    # Convert single uploaded file to list to keep pipeline intact
+    files = [file]
 
     all_docs = []
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
@@ -132,7 +128,6 @@ async def upload_pdfs(
     GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever(search_kwargs={"k": 6})
 
     return {"status": "indexed", "documents": len(GLOBAL_DOCS)}
-
 
 @app.post("/query", response_model=QueryResponse)
 def query_pdfs(req: QueryRequest):
