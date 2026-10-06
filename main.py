@@ -30,6 +30,31 @@ def custom_openapi():
         openapi_version="3.0.3",
         routes=app.routes,
     )
+    
+    # Explicitly force binary file format for /upload request body
+    try:
+        upload_path = openapi_schema["paths"]["/upload"]["post"]
+        upload_path["requestBody"] = {
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "files": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "binary"},
+                                "description": "Select PDF files to upload"
+                            }
+                        },
+                        "required": ["files"]
+                    }
+                }
+            },
+            "required": True
+        }
+    except KeyError:
+        pass
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -82,17 +107,22 @@ class QueryResponse(BaseModel):
     confidence: str
     context: Optional[str] = None
 
+from typing import Annotated
+
 @app.post("/upload")
 async def upload_pdfs(
-    file: UploadFile = File(..., description="Select a PDF file to analyze")
+    files: Annotated[
+        list[UploadFile], 
+        File(description="Select one or more PDF files to analyze")
+    ]
 ):
     global GLOBAL_DOCS, GLOBAL_VECTORSTORE, GLOBAL_RETRIEVER
 
     if not EMBEDDINGS:
         raise HTTPException(status_code=500, detail="HF_API_KEY is missing in environment variables.")
 
-    # Convert single uploaded file to list to keep pipeline intact
-    files = [file]
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
 
     all_docs = []
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
