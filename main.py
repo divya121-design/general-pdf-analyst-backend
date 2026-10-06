@@ -8,7 +8,8 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import RedirectResponse
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -81,8 +82,9 @@ LLM = (
 )
 
 EMBEDDINGS = (
-    HuggingFaceInferenceAPIEmbeddings(
-        api_key=hf_api_key, model_name="BAAI/bge-small-en-v1.5"
+    HuggingFaceEndpointEmbeddings(
+        model="BAAI/bge-small-en-v1.5",
+        huggingfacehub_api_token=hf_api_key,
     )
     if hf_api_key
     else None
