@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
 
 from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from langchain_groq import ChatGroq
@@ -172,12 +172,12 @@ async def upload_pdfs(
 
     try:
         GLOBAL_DOCS = all_docs
-        GLOBAL_VECTORSTORE = Chroma.from_documents(
-            documents=GLOBAL_DOCS, embedding=EMBEDDINGS
+        GLOBAL_VECTORSTORE = FAISS.from_documents(
+            GLOBAL_DOCS,
+            EMBEDDINGS
         )
-        GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever(
-            search_kwargs={"k": 6}
-        )
+        GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever()
+
     except Exception as e:
         logger.error(f"Error building vectorstore: {e}")
         raise HTTPException(
