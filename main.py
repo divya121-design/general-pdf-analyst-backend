@@ -1,21 +1,18 @@
+import logging
 import os
 import tempfile
-import logging
 from typing import Annotated, Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import RedirectResponse
-from fastapi.openapi.utils import get_openapi
-
-from pydantic import BaseModel
 from dotenv import load_dotenv
-
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import RedirectResponse
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-
 from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -172,11 +169,8 @@ async def upload_pdfs(
 
     try:
         GLOBAL_DOCS = all_docs
-        GLOBAL_VECTORSTORE = FAISS.from_documents(
-            GLOBAL_DOCS,
-            EMBEDDINGS
-        )
-        GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever()
+        GLOBAL_VECTORSTORE = FAISS.from_documents(GLOBAL_DOCS, EMBEDDINGS)
+        GLOBAL_RETRIEVER = GLOBAL_VECTORSTORE.as_retriever(search_kwargs={"k": 6})
 
     except Exception as e:
         logger.error(f"Error building vectorstore: {e}")
